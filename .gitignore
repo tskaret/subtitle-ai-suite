@@ -1,0 +1,110 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+subtitle-venv/
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+*.temp
+
+# AI Models (large files)
+models/
+pretrained_models/
+*.pth
+*.pt
+*.bin
+*.safetensors
+
+# Audio/Video files
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.wav
+*.mp3
+*.flac
+*.m4a
+
+# Output files
+output/
+batch_output/
+test_output/
+
+# Cache directories
+.cache/
+.huggingface/
+.speechbrain/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Claude files
+.claude/
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Progress and report files
+batch_progress_*.json
+batch_report_*.json
