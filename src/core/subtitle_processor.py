@@ -4,10 +4,13 @@ import torch
 import logging
 import whisper
 import torchaudio
+import tempfile
+import subprocess
+import time
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, asdict
 
-from .speaker_diarization import AdvancedSpeakerDiarization, SpeakerProfile
+from .modern_speaker_diarization import ModernSpeakerDiarization, SpeakerProfile
 
 @dataclass
 class SubtitleSegment:
@@ -51,7 +54,7 @@ class EnhancedSubtitleProcessor:
         
         # Initialize key components
         self.whisper_model = self._load_whisper_model()
-        self.speaker_diarization = AdvancedSpeakerDiarization(config)
+        self.speaker_diarization = ModernSpeakerDiarization(config)
         
         # Color palette for speakers
         self.speaker_colors = {
@@ -87,23 +90,47 @@ class EnhancedSubtitleProcessor:
         Comprehensive audio processing with speaker diarization
         
         Args:
-            audio_path (str): Path to input audio file
+            audio_path (str): Path to input audio file or YouTube URL
         
         Returns:
             Dict containing processing results
         """
         try:
+            start_time = time.time()
+            print(f"🚀 Starting audio processing at {time.strftime('%H:%M:%S')}")
+            
+            # Handle YouTube URLs
+            if audio_path.startswith(('http://', 'https://')):
+                download_start = time.time()
+                audio_path = self._download_youtube_audio(audio_path)
+                download_time = time.time() - download_start
+                print(f"⬇️  Download completed in {download_time:.1f}s")
+            
             # Perform speaker diarization
+            diarization_start = time.time()
             speaker_profiles = self.speaker_diarization.process_audio(audio_path)
+            diarization_time = time.time() - diarization_start
+            print(f"🎭 Speaker diarization completed in {diarization_time:.1f}s")
+            print(f"DEBUG: Speaker diarization returned {len(speaker_profiles)} speakers")
+            for i, speaker in enumerate(speaker_profiles):
+                print(f"DEBUG: Speaker {i}: {speaker.id}, speech_time: {speaker.total_speech_time}s")
             
             # Transcribe audio with word-level timestamps
+            transcription_start = time.time()
             transcription = self._transcribe_with_timestamps(audio_path)
+            transcription_time = time.time() - transcription_start
+            print(f"🎤 Transcription completed in {transcription_time:.1f}s")
+            print(f"DEBUG: Transcription returned {len(transcription.get('segments', []))} segments")
             
             # Synchronize transcription with speaker profiles
+            sync_start = time.time()
             synchronized_subtitles = self._synchronize_speakers(
                 transcription['segments'], 
                 speaker_profiles
             )
+            sync_time = time.time() - sync_start
+            print(f"🔄 Speaker synchronization completed in {sync_time:.1f}s")
+            print(f"DEBUG: Synchronized subtitles: {len(synchronized_subtitles)} segments")
             
             # Prepare result
             result = {
@@ -114,7 +141,19 @@ class EnhancedSubtitleProcessor:
             }
             
             # Export results
+            export_start = time.time()
             self._export_results(result)
+            export_time = time.time() - export_start
+            
+            total_time = time.time() - start_time
+            print(f"📁 Export completed in {export_time:.1f}s")
+            print(f"✅ Total processing time: {total_time:.1f}s ({total_time/60:.1f} minutes)")
+            
+            # Performance summary
+            audio_duration = transcription.get('duration', 0) or len(synchronized_subtitles) * 2  # rough estimate
+            if audio_duration > 0:
+                real_time_factor = total_time / audio_duration
+                print(f"⚡ Performance: {real_time_factor:.1f}x real-time ({audio_duration:.1f}s audio in {total_time:.1f}s)")
             
             return result
         
@@ -177,35 +216,45 @@ class EnhancedSubtitleProcessor:
         Returns:
             List of synchronized subtitle segments
         """
-        # Assign colors to primary speakers (top 95% of dialogue)
-        primary_speakers = sorted(
+        # Assign colors to ALL speakers (both major and minor speakers get distinct colors)
+        all_speakers = sorted(
             speaker_profiles, 
             key=lambda x: x.total_speech_time, 
             reverse=True
-        )[:len(self.speaker_colors)]
+        )
         
-        # Assign colors to primary speakers
+        # Assign colors to all speakers, cycling through color palette if needed
         speaker_color_map = {}
-        for i, speaker in enumerate(primary_speakers):
-            color_name = list(self.speaker_colors.keys())[i]
+        for i, speaker in enumerate(all_speakers):
+            color_name = list(self.speaker_colors.keys())[i % len(self.speaker_colors)]
             speaker_color_map[speaker.id] = self.speaker_colors[color_name]
         
-        # Create synchronized subtitle segments
+        # Create synchronized subtitle segments with temporal alignment
         synchronized_segments = []
         
         for segment in transcription_segments:
-            # Basic implementation of speaker assignment
-            # In a more advanced version, this would use more sophisticated 
-            # methods like embedding similarity or temporal overlap
-            speaker_id = primary_speakers[0].id if primary_speakers else None
+            # Find the best matching speaker based on temporal overlap
+            best_speaker_id = self.speaker_diarization.find_best_speaker_match(
+                segment['start'], 
+                segment['end'], 
+                all_speakers
+            )
+            
+            # Fallback to simple dialogue detection if no good temporal match
+            if not best_speaker_id and len(all_speakers) >= 2:
+                best_speaker_id = self.speaker_diarization.simple_dialogue_detection(
+                    segment['text'], all_speakers
+                )
+            
+            # Final fallback to first speaker
+            if not best_speaker_id and all_speakers:
+                best_speaker_id = all_speakers[0].id
             
             subtitle_segment = SubtitleSegment(
                 text=segment['text'],
                 start=segment['start'],
                 end=segment['end'],
-                speaker_id=speaker_id,
-                speaker_color=speaker_color_map.get(speaker_id),
-                speaker_confidence=1.0  # Placeholder
+                speaker_id=best_speaker_id
             )
             
             synchronized_segments.append(subtitle_segment)
@@ -358,3 +407,56 @@ class EnhancedSubtitleProcessor:
         minutes = int((seconds % 3600) // 60)
         secs = seconds % 60
         return f"{hours:d}:{minutes:02d}:{secs:05.2f}"
+
+    def _download_youtube_audio(self, url: str) -> str:
+        """
+        Download audio from YouTube URL using yt-dlp
+        
+        Args:
+            url (str): YouTube URL
+            
+        Returns:
+            str: Path to downloaded audio file
+        """
+        try:
+            # Create temporary directory for download
+            temp_dir = tempfile.mkdtemp()
+            
+            # Use yt-dlp to download audio
+            cmd = [
+                'yt-dlp',
+                '--extract-audio',
+                '--audio-format', 'wav',
+                '--audio-quality', '0',
+                '--output', os.path.join(temp_dir, '%(title)s.%(ext)s'),
+                '--no-playlist',
+                url
+            ]
+            
+            self.logger.info(f"Downloading audio from: {url}")
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            
+            # Find the downloaded file
+            self.logger.info(f"Looking for audio files in: {temp_dir}")
+            files = os.listdir(temp_dir)
+            self.logger.info(f"Files found: {files}")
+            
+            for file in files:
+                if file.endswith(('.wav', '.mp3', '.m4a', '.webm')):
+                    audio_path = os.path.join(temp_dir, file)
+                    self.logger.info(f"Downloaded audio: {audio_path}")
+                    return audio_path
+            
+            # Check if we got an HTML/MHTML file instead of audio
+            if any(f.endswith(('.html', '.mhtml')) for f in files):
+                raise RuntimeError("This video contains only images/text, no audio content available for transcription")
+            else:
+                raise RuntimeError(f"No audio file found after download. Files in {temp_dir}: {files}")
+            
+        except subprocess.CalledProcessError as e:
+            self.logger.error(f"yt-dlp download failed: {e.stderr}")
+            raise RuntimeError(f"Failed to download YouTube audio: {e.stderr}")
+        except Exception as e:
+            self.logger.error(f"YouTube download error: {e}")
+            raise
+
