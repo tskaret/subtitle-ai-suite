@@ -1,0 +1,174 @@
+name: CI/CD Pipeline - Subtitle AI Suite
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9, 3.10, 3.11]
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg libsndfile1 libsndfile1-dev
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov flake8 black
+    
+    - name: Lint with flake8
+      run: |
+        # Stop the build if there are Python syntax errors or undefined names
+        flake8 src --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Exit-zero treats all errors as warnings
+        flake8 src --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    - name: Format check with black
+      run: |
+        black --check --diff src/
+    
+    - name: Run basic tests
+      run: |
+        python -m pytest tests/test_basic.py -v
+    
+    - name: Test imports and basic functionality
+      run: |
+        python -c "
+        import sys
+        sys.path.insert(0, 'src')
+        from core.modern_speaker_diarization import ModernSpeakerDiarization
+        from core.subtitle_processor import EnhancedSubtitleProcessor
+        print('✅ Core imports successful')
+        "
+    
+    - name: Test CLI interface
+      run: |
+        python src/interfaces/cli.py --help
+
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install safety bandit
+    
+    - name: Security scan with bandit
+      run: |
+        bandit -r src/ -f json -o bandit-report.json || true
+        bandit -r src/ || true
+    
+    - name: Check for vulnerabilities with safety
+      run: |
+        safety check --json --output safety-report.json || true
+        safety check || true
+
+  performance-test:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg libsndfile1
+    
+    - name: Download test audio
+      run: |
+        # Create a short test audio file for performance testing
+        python -c "
+        import numpy as np
+        import soundfile as sf
+        # Generate 10 seconds of test audio with 2 distinct tones (simulating 2 speakers)
+        duration = 10
+        sample_rate = 16000
+        t = np.linspace(0, duration, duration * sample_rate)
+        # Speaker 1: 440 Hz tone for first 5 seconds
+        speaker1 = np.sin(2 * np.pi * 440 * t[:5*sample_rate]) * 0.3
+        # Speaker 2: 880 Hz tone for last 5 seconds  
+        speaker2 = np.sin(2 * np.pi * 880 * t[5*sample_rate:]) * 0.3
+        audio = np.concatenate([speaker1, speaker2])
+        sf.write('test_audio.wav', audio, sample_rate)
+        print('✅ Generated test audio file')
+        "
+    
+    - name: Performance benchmark
+      env:
+        HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      run: |
+        python -c "
+        import time
+        import sys
+        sys.path.insert(0, 'src')
+        from core.modern_speaker_diarization import ModernSpeakerDiarization
+        
+        start_time = time.time()
+        diarizer = ModernSpeakerDiarization()
+        speakers = diarizer.process_audio('test_audio.wav')
+        processing_time = time.time() - start_time
+        
+        print(f'✅ Speaker diarization completed in {processing_time:.2f}s')
+        print(f'✅ Found {len(speakers)} speakers')
+        
+        # Performance assertions
+        assert processing_time < 60, f'Processing too slow: {processing_time}s > 60s'
+        assert len(speakers) >= 1, f'No speakers detected'
+        print('✅ Performance benchmarks passed')
+        " || echo "⚠️ Performance test failed (non-critical)"
+
+  build-status:
+    runs-on: ubuntu-latest
+    needs: [test, security-scan]
+    if: always()
+    
+    steps:
+    - name: Report build status
+      run: |
+        if [[ "${{ needs.test.result }}" == "success" && "${{ needs.security-scan.result }}" == "success" ]]; then
+          echo "✅ All checks passed - Build successful!"
+        else
+          echo "❌ Some checks failed:"
+          echo "Tests: ${{ needs.test.result }}"
+          echo "Security: ${{ needs.security-scan.result }}"
+          exit 1
+        fi

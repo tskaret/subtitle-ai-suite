@@ -1,0 +1,69 @@
+name: "CodeQL Security Analysis"
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    - cron: '30 2 * * 1'  # Weekly on Mondays at 2:30 AM UTC
+
+jobs:
+  analyze:
+    name: Analyze Code
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'python' ]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: ${{ matrix.language }}
+        queries: security-extended,security-and-quality
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # Install only essential dependencies for security scanning
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install torchaudio --index-url https://download.pytorch.org/whl/cpu
+        pip install pyannote.audio pyannote.core
+        pip install whisper transformers
+        pip install requests beautifulsoup4 yt-dlp
+        pip install flask fastapi
+        pip install cryptography python-dotenv
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+      with:
+        category: "/language:${{matrix.language}}"
+
+    - name: Upload CodeQL results to GitHub
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: /home/runner/work/_temp/codeql_databases/python/results/python.sarif
+
+    - name: Security scan summary
+      if: always()
+      run: |
+        echo "🔍 CodeQL security analysis completed"
+        echo "📊 Results will be available in the Security tab"
+        echo "🔒 Any findings will create security alerts"

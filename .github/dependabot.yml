@@ -1,0 +1,65 @@
+version: 2
+updates:
+  # Python dependencies
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "tskaret"
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    
+    # Group AI/ML dependencies together
+    groups:
+      ai-ml-dependencies:
+        patterns:
+          - "torch*"
+          - "pyannote*" 
+          - "speechbrain"
+          - "transformers"
+          - "whisper*"
+          - "librosa"
+          - "scipy"
+          - "numpy"
+          - "scikit-learn"
+        
+      development-dependencies:
+        patterns:
+          - "pytest*"
+          - "black"
+          - "flake8"
+          - "mypy"
+          - "bandit"
+          - "safety"
+    
+    # Ignore major version updates for stable AI models
+    ignore:
+      - dependency-name: "torch"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "pyannote.audio"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "transformers"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions dependencies  
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
