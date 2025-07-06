@@ -10,7 +10,7 @@ openai-whisper>=20231117
 torch>=2.0.0,<3.0.0
 torchaudio>=2.0.0,<3.0.0
 torchvision>=0.15.0,<1.0.0
-speechbrain>=0.5.0,<1.0.0
+speechbrain>=0.5.0,<2.0.0
 transformers>=4.30.0,<5.0.0
 
 # Speaker diarization - modern approach
