@@ -11,6 +11,10 @@ from dataclasses import dataclass, asdict
 from pyannote.audio import Pipeline
 from pyannote.core import Annotation, Segment
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 @dataclass
 class SpeakerProfile:
