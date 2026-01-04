@@ -23,7 +23,7 @@ This plan outlines the steps to implement the full functionality of the `subtitl
 *   **Sub-task 1.2: Project Structure Alignment**
     *   Compare the current project structure with the "Recommended Project Structure" in `gameplan.md`.
     *   Create any missing directories and placeholder `__init__.py` files as per the recommended structure.
-    *   *Status: Pending*
+    *   *Status: Completed*
 
 *   **Sub-task 1.3: Basic Input Handling (`src/core/input_handler.py`)**
     *   Implement basic functionality for downloading YouTube videos using `pytube` and `yt-dlp`.
