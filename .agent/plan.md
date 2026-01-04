@@ -100,7 +100,7 @@ This plan outlines the steps to implement the full functionality of the `subtitl
 
 *   **Sub-task 4.2: Integration Tests**
     *   Write integration tests for the full pipeline, batch processing, and CLI.
-    *   *Status: Pending*
+    *   *Status: Completed*
 
 *   **Sub-task 4.3: End-to-End Tests**
     *   Verify main application flows from input to final output.
