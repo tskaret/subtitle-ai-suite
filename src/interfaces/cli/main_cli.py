@@ -23,13 +23,10 @@ current_file_path = Path(__file__).resolve()
 project_root = current_file_path.parents[3]
 sys.path.insert(0, str(project_root))
 
-from src.core.input_handler import InputHandler
-from src.core.audio_processor import AudioProcessor
-from src.core.transcription import TranscriptionProcessor
-from src.core.speaker_analyzer import ModernSpeakerDiarization, SpeakerProfile # New import
-from src.core.synchronizer import Synchronizer # New import
-from src.formats.srt_handler import SrtHandler
-from src.formats.ass_handler import AssHandler
+# Import the SubtitlePipelineManager
+from src.processing.pipeline_manager import SubtitlePipelineManager
+
+# Assuming setup_logging is now in src/subtitle_suite/utils/logger.py
 from src.subtitle_suite.utils.logger import setup_logging
 
 # For now, temporarily re-add DeviceManager import for system info
@@ -39,26 +36,8 @@ import psutil # Used in show_system_info
 class SubtitleCLI:
     """Complete CLI interface for subtitle processing"""
     
-    # Predefined color palette for speakers (from gameplan.md)
-    DEFAULT_COLORS = {
-        'red': '&H6B6BFF&',
-        'cyan': '&HC4CD4E&',
-        'blue': '&HD1B745&',
-        'green': '&HB4CE96&',
-        'yellow': '&HA7EAFF&',
-        'plum': '&HDDA0DD&',
-        'orange': '&H129CF3&'
-    }
-
     def __init__(self):
         self.logger = setup_logging()
-        self.input_handler = InputHandler()
-        self.audio_processor = AudioProcessor()
-        self.transcription_processor = TranscriptionProcessor()
-        self.speaker_diarization = ModernSpeakerDiarization() # Initialize Diarization
-        self.synchronizer = Synchronizer() # Initialize Synchronizer
-        self.srt_handler = SrtHandler()
-        self.ass_handler = AssHandler()
         
     def create_parser(self) -> argparse.ArgumentParser:
         """Create comprehensive argument parser"""
@@ -275,7 +254,7 @@ Examples:
         print(f"\nPython Version: {sys.version}")
         print(f"PyTorch Version: {torch.__version__}")
         
-        # Check for optional dependencies (simplified for now)
+        # Check for optional dependencies
         print("\nDependency Status:")
         try:
             import whisper
@@ -298,190 +277,26 @@ Examples:
         print(f"  CPU Cores: {psutil.cpu_count()}")
         print(f"  Memory: {psutil.virtual_memory().total / 1e9:.1f} GB")
 
-
-    def _analyze_speaker_distribution(self, segments: List[Dict[str, Any]], speaker_profiles: List[SpeakerProfile], threshold: float) -> Dict[str, str]:
-        """
-        Analyzes speaker distribution and assigns colors based on a threshold.
-        Returns a mapping of speaker ID to ASS color code.
-        """
-        if not speaker_profiles or not segments:
-            self.logger.warning("No speaker profiles or segments for colorization.")
-            return {}
-
-        speaker_word_counts = {profile.id: 0 for profile in speaker_profiles}
-        speaker_speech_times = {profile.id: 0.0 for profile in speaker_profiles}
-
-        total_word_count = 0
-        total_speech_time = 0.0
-
-        for segment in segments:
-            speaker_id = segment.get('speaker')
-            if speaker_id and speaker_id in speaker_word_counts:
-                word_count = len(segment.get('text', '').split())
-                speech_time = segment.get('end', 0) - segment.get('start', 0)
-                
-                speaker_word_counts[speaker_id] += word_count
-                speaker_speech_times[speaker_id] += speech_time
-                total_word_count += word_count
-                total_speech_time += speech_time
-
-        if total_word_count == 0:
-            self.logger.warning("No words transcribed for speaker distribution analysis.")
-            return {}
-        
-        # Calculate percentage of speech time for each speaker
-        speaker_percentages = {
-            speaker_id: (time / total_speech_time) if total_speech_time > 0 else 0
-            for speaker_id, time in speaker_speech_times.items()
-        }
-
-        # Identify primary speakers
-        primary_speakers = []
-        sorted_speakers = sorted(speaker_percentages.items(), key=lambda item: item[1], reverse=True)
-
-        cumulative_percentage = 0.0
-        for speaker_id, percentage in sorted_speakers:
-            cumulative_percentage += percentage
-            primary_speakers.append(speaker_id)
-            if cumulative_percentage >= threshold:
-                break
-        
-        # Assign colors from the predefined palette
-        speaker_colors: Dict[str, str] = {}
-        color_names = list(self.DEFAULT_COLORS.keys())
-        
-        for i, speaker_id in enumerate(primary_speakers):
-            if i < len(color_names):
-                speaker_colors[speaker_id] = self.DEFAULT_COLORS[color_names[i]]
-            else:
-                self.logger.warning(f"Ran out of unique colors for speaker {speaker_id}. Assigning default white.")
-                speaker_colors[speaker_id] = "&H00FFFFFF&" # Fallback to white
-
-        self.logger.info(f"Speaker color assignment: {speaker_colors}")
-        return speaker_colors
-
-
     def process_single(self, args) -> bool:
-        """Process single input"""
-        input_path_processed = None
-        processed_audio_path = None
+        """Process single input using SubtitlePipelineManager"""
         try:
-            # 1. Handle Input (local file or download YouTube)
-            if args.input:
-                if "youtube.com" in args.input or "youtu.be" in args.input:
-                    self.logger.info(f"Downloading YouTube video: {args.input}")
-                    input_path_processed = self.input_handler.download_youtube_video(args.input)
-                else:
-                    self.logger.info(f"Processing local file: {args.input}")
-                    input_path_processed = self.input_handler.process_local_file(args.input)
+            self.logger.info(f"Starting pipeline for: {args.input}")
+            pipeline_manager = SubtitlePipelineManager(args)
+            result = pipeline_manager.process(args.input)
             
-            if not input_path_processed:
-                raise ValueError("No valid input provided for processing.")
-
-            # Ensure temp directory exists for AudioProcessor to use
-            temp_output_dir = Path(args.temp_dir) / "audio_processing"
-            temp_output_dir.mkdir(parents=True, exist_ok=True)
-            
-            # 2. Process Audio
-            self.logger.info(f"Extracting and processing audio from: {input_path_processed}")
-            processed_audio_path = self.audio_processor.process(
-                str(input_path_processed), 
-                output_path=str(temp_output_dir / f"{Path(input_path_processed).stem}_processed.wav")
-            )
-
-            # 3. Speaker Diarization
-            speaker_profiles = []
-            if args.colorize: # Only run diarization if colorization is requested
-                self.logger.info(f"Performing speaker diarization on: {processed_audio_path}")
-                speaker_profiles = self.speaker_diarization.process_audio(processed_audio_path)
-                self.logger.info(f"Diarization found {len(speaker_profiles)} speakers.")
-
-
-            # 4. Transcribe Audio
-            self.logger.info(f"Transcribing audio: {processed_audio_path}")
-            self.transcription_processor.model_name = args.whisper_model # Update model if specified
-            self.transcription_processor.device = args.device if args.device != 'auto' else None
-            
-            # Re-load model if parameters changed, or if it's the first run
-            if not self.transcription_processor.model or \
-               self.transcription_processor.model.model_name != args.whisper_model or \
-               self.transcription_processor.device != (args.device if args.device != 'auto' else None):
-                self.transcription_processor._load_model() # Force reload with new params
-                
-            transcription_result = self.transcription_processor.transcribe_audio(
-                processed_audio_path, language=args.language
-            )
-            raw_transcription_segments = transcription_result.get('segments', [])
-
-            # 5. Synchronize Transcription with Diarization (if enabled)
-            synchronized_segments = raw_transcription_segments
-            if speaker_profiles:
-                self.logger.info("Synchronizing transcription segments with speaker diarization.")
-                synchronized_segments = self.synchronizer.synchronize(raw_transcription_segments, speaker_profiles)
-            
-            # 6. Generate Subtitles
-            base_output_name = Path(input_path_processed).stem
-            if args.prefix:
-                base_output_name = f"{args.prefix}_{base_output_name}"
-
-            final_output_dir = Path(args.output_dir)
-            final_output_dir.mkdir(parents=True, exist_ok=True)
-
-            speaker_colors_map = {}
-            if args.colorize and speaker_profiles:
-                self.logger.info("Analyzing speaker distribution for colorization.")
-                speaker_colors_map = self._analyze_speaker_distribution(synchronized_segments, speaker_profiles, args.speaker_threshold)
-            elif args.colorize and not speaker_profiles:
-                self.logger.warning("Colorization requested but no speaker profiles available.")
-
-
-            for fmt in args.format:
-                output_subtitle_path = final_output_dir / f"{base_output_name}.{fmt}"
-                if fmt == 'srt':
-                    self.logger.info(f"Generating SRT: {output_subtitle_path}")
-                    # SrtHandler expects list of dicts with 'start', 'end', 'text'
-                    srt_data = []
-                    for segment in synchronized_segments: # Use synchronized segments
-                        srt_data.append({
-                            'start': segment['start'],
-                            'end': segment['end'],
-                            'text': f"[{segment['speaker']}] {segment['text']}" if 'speaker' in segment else segment['text']
-                        })
-                    self.srt_handler.generate_srt(srt_data, output_subtitle_path)
-                elif fmt == 'ass':
-                    self.logger.info(f"Generating ASS: {output_subtitle_path}")
-                    # AssHandler can take 'speaker' if available. Use synchronized segments.
-                    # Pass speaker_colors_map if colorization is enabled
-                    self.ass_handler.generate_ass(synchronized_segments, output_subtitle_path, speaker_colors=speaker_colors_map if args.colorize else None)
-                elif fmt == 'json':
-                    self.logger.info(f"Generating JSON transcription result: {output_subtitle_path}")
-                    # Dump the synchronized segments for JSON output
-                    with open(output_subtitle_path, 'w', encoding='utf-8') as f:
-                        json.dump(synchronized_segments, f, ensure_ascii=False, indent=4)
-                else:
-                    self.logger.warning(f"Unsupported format for basic generation: {fmt}")
-
-            print(f"✅ Completed: {args.input}")
-            return True
+            if result["success"]:
+                print(f"✅ Completed: {args.input}")
+                self.logger.info(f"Pipeline completed successfully for {args.input}")
+                return True
+            else:
+                print(f"❌ Error processing {args.input}: {result.get('error', 'Unknown error')}")
+                self.logger.error(f"Pipeline failed for {args.input}: {result.get('error', 'Unknown error')}")
+                return False
             
         except Exception as e:
-            print(f"❌ Error processing {args.input}: {e}")
-            self.logger.error(f"Processing error: {e}", exc_info=True)
+            print(f"❌ Unexpected error during single file processing: {e}")
+            self.logger.error(f"Unexpected error in process_single: {e}", exc_info=True)
             return False
-        finally:
-            if processed_audio_path and os.path.exists(processed_audio_path) and not args.keep_temp:
-                os.remove(processed_audio_path)
-                self.logger.info(f"Cleaned up processed audio file: {processed_audio_path}")
-            if not args.keep_temp:
-                # Basic cleanup, a more robust cleanup will be in a dedicated util or processor
-                temp_audio_dir = Path(args.temp_dir) / "audio_processing"
-                if temp_audio_dir.exists():
-                    shutil.rmtree(temp_audio_dir)
-                    self.logger.info(f"Cleaned up temporary audio directory: {temp_audio_dir}")
-                # Also clean up downloaded videos if they are in self.input_handler.output_dir
-                # This needs a more sophisticated way to track downloaded files vs. user-provided ones
-                self.logger.info(f"Basic cleanup done. Consider --keep-temp or more advanced cleanup.")
-
     
     def process_batch(self, args) -> bool:
         """Process batch directory (placeholder for now)"""
@@ -543,15 +358,8 @@ Examples:
             self.logger.error(f"Unexpected error in CLI run: {e}", exc_info=True)
             return 1
         finally:
-            if not args.keep_temp:
-                # Basic cleanup, a more robust cleanup will be in a dedicated util or processor
-                temp_audio_dir = Path(args.temp_dir) / "audio_processing"
-                if temp_audio_dir.exists():
-                    shutil.rmtree(temp_audio_dir)
-                    self.logger.info(f"Cleaned up temporary audio directory: {temp_audio_dir}")
-                # Also clean up downloaded videos if they are in self.input_handler.output_dir
-                # This needs a more sophisticated way to track downloaded files vs. user-provided ones
-                self.logger.info(f"Basic cleanup done. Consider --keep-temp or more advanced cleanup.")
+            # Cleanup is now handled by SubtitlePipelineManager's _cleanup method
+            pass
 
 
 def main():
