@@ -67,7 +67,7 @@ This plan outlines the steps to implement the full functionality of the `subtitl
 
 *   **Sub-task 2.4: CLI Enhancements**
     *   Add CLI arguments for enabling colorization and setting thresholds.
-    *   *Status: Pending*
+    *   *Status: Completed*
 
 ---
 
