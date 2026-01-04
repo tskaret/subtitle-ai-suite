@@ -3,6 +3,15 @@ import numpy as np
 import soundfile as sf
 import os
 import shutil
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+
+# TEMPORARY: Adjusting sys.path for direct execution during development
+import sys
+current_file_path = Path(__file__).resolve()
+project_root = current_file_path.parents[2] # Adjust if needed
+sys.path.insert(0, str(project_root))
+
 from src.core.audio_processor import AudioProcessor
 
 class TestAudioProcessor:
@@ -72,3 +81,39 @@ class TestAudioProcessor:
         audio_processor.process(noisy_audio_file, str(output_path))
         assert os.path.exists(output_path)
 
+    @patch('moviepy.editor.VideoFileClip')
+    def test_extract_audio_from_video(self, mock_videofileclip, audio_processor, tmp_path):
+        mock_audio_clip = MagicMock()
+        mock_videofileclip.return_value.__enter__.return_value.audio = mock_audio_clip
+        
+        video_path = str(tmp_path / "test_video.mp4")
+        output_audio_path = str(tmp_path / "extracted_audio.wav")
+        
+        extracted_path = audio_processor.extract_audio_from_video(video_path, output_audio_path)
+        
+        mock_videofileclip.assert_called_once_with(video_path)
+        mock_audio_clip.write_audiofile.assert_called_once_with(
+            output_audio_path,
+            fps=audio_processor.target_sr,
+            nbytes=2,
+            nchannels=1
+        )
+        assert extracted_path == output_audio_path
+
+    @patch('src.core.audio_processor.AudioProcessor.extract_audio_from_video')
+    @patch('librosa.load', return_value=(np.array([0.1, -0.1]), 16000))
+    @patch('soundfile.write')
+    def test_process_with_video_input(self, mock_sf_write, mock_librosa_load, mock_extract_audio, audio_processor, tmp_path):
+        video_input_path = str(tmp_path / "input.mp4")
+        extracted_audio_temp_path = str(tmp_path / "audio_processing" / "input_extracted.wav")
+        mock_extract_audio.return_value = extracted_audio_temp_path
+        
+        # Create the directory that audio_processor.process expects for its temporary extracted audio
+        (Path(audio_processor.output_dir) / "audio_processing").mkdir(parents=True, exist_ok=True)
+
+        processed_output_path = audio_processor.process(video_input_path)
+        
+        mock_extract_audio.assert_called_once_with(video_input_path, extracted_audio_temp_path)
+        mock_librosa_load.assert_called_once_with(extracted_audio_temp_path, sr=audio_processor.target_sr, mono=True)
+        mock_sf_write.assert_called_once()
+        assert Path(processed_output_path).name == "input_extracted_processed.wav"
