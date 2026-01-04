@@ -54,7 +54,7 @@ This plan outlines the steps to implement the full functionality of the `subtitl
 
 *   **Sub-task 2.1: Speaker Diarization (`src/core/speaker_analyzer.py`)**
     *   Integrate `speechbrain` for speaker diarization.
-    *   *Status: Pending*
+    *   *Status: Completed*
 
 *   **Sub-task 2.2: Synchronization (`src/core/synchronizer.py`)**
     *   Implement multi-source timestamp validation and synchronization with VAD.
