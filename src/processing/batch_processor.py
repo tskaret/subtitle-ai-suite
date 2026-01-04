@@ -11,11 +11,12 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass, asdict
 from tqdm import tqdm
+import argparse # Needed to create a Namespace object for SubtitlePipelineManager
 
 # Update imports to use absolute paths
 from src.subtitle_suite.utils.error_handler import ErrorHandler, SubtitleProcessingError
 from src.subtitle_suite.utils.logger import setup_logging
-# Removed: from .subtitle_processor import EnhancedSubtitleProcessor
+from src.processing.pipeline_manager import SubtitlePipelineManager # New Import
 
 @dataclass
 class BatchJob:
@@ -196,7 +197,7 @@ class BatchProcessor:
     
     def process_job(self, job: BatchJob) -> BatchJob:
         """
-        Process a single batch job
+        Process a single batch job using SubtitlePipelineManager.
         
         Args:
             job (BatchJob): Job to process
@@ -208,26 +209,35 @@ class BatchProcessor:
         job.start_time = time.time()
         
         try:
-            # Validate input
-            # self.error_handler.validate_input(job.input_path) # ErrorHandler.validate_input does not exist
+            # Create an argparse.Namespace object from job.config
+            # This mimics the args object expected by SubtitlePipelineManager
+            mock_args = argparse.Namespace(**job.config)
             
-            # Create output directory
-            os.makedirs(job.output_dir, exist_ok=True)
+            # Ensure required args are present, add defaults if missing
+            mock_args.temp_dir = getattr(mock_args, 'temp_dir', './temp')
+            mock_args.output_dir = getattr(mock_args, 'output_dir', job.output_dir)
+            mock_args.whisper_model = getattr(mock_args, 'whisper_model', 'large-v2')
+            mock_args.device = getattr(mock_args, 'device', 'auto')
+            mock_args.language = getattr(mock_args, 'language', None)
+            mock_args.colorize = getattr(mock_args, 'colorize', False)
+            mock_args.speaker_threshold = getattr(mock_args, 'speaker_threshold', 0.95)
+            mock_args.prefix = getattr(mock_args, 'prefix', None)
+            mock_args.format = getattr(mock_args, 'format', ['srt', 'ass'])
+            mock_args.keep_temp = getattr(mock_args, 'keep_temp', False)
+
+            # Instantiate and run the pipeline manager
+            pipeline_manager = SubtitlePipelineManager(mock_args)
+            result = pipeline_manager.process(job.input_path)
             
-            # Process the file - Placeholder for SubtitlePipelineManager
-            # This part will be updated to use SubtitlePipelineManager in a later step
-            self.logger.info(f"Processing job {job.id} for input: {job.input_path}")
-            # result = processor.process_audio(job.input_path) # Removed
-            # Placeholder for actual processing result
-            result = {"success": True, "generated_files": []} 
+            if result["success"]:
+                job.status = 'completed'
+                job.output_files = result.get("generated_files", [])
+            else:
+                job.status = 'failed'
+                job.error_message = result.get("error", "Unknown pipeline error")
             
-            # Record output files
-            job.output_files = result.get("generated_files", []) # Placeholder for output files
-            
-            job.status = 'completed'
             job.end_time = time.time()
-            
-            self.logger.info(f"Job {job.id} completed in {job.end_time - job.start_time:.2f}s")
+            self.logger.info(f"Job {job.id} completed in {job.end_time - job.start_time:.2f}s with status: {job.status}")
             
         except Exception as e:
             job.status = 'failed'
