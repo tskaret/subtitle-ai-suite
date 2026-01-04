@@ -88,7 +88,7 @@ This plan outlines the steps to implement the full functionality of the `subtitl
 
 *   **Sub-task 3.4: GUI Implementation (`src/interfaces/gui/main_window.py`)**
     *   Develop the basic GUI using `tkinter` or `customtkinter`.
-    *   *Status: Pending*
+    *   *Status: Completed*
 
 ---
 
