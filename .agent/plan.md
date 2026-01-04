@@ -46,7 +46,7 @@ This plan outlines the steps to implement the full functionality of the `subtitl
 
 *   **Sub-task 1.7: Core CLI Integration (`src/interfaces/cli/main_cli.py`)**
     *   Expose basic functionality through a command-line interface.
-    *   *Status: Pending*
+    *   *Status: Completed*
 
 ---
 
