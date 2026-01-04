@@ -165,7 +165,8 @@ class TestSystemIntegration:
     
     def test_directory_creation(self):
         """Test that required directories can be created"""
-        test_dirs = ['./test_temp', './test_output', './test_logs']
+        # Use unique names to avoid conflicts with other tests holding file handles
+        test_dirs = ['./test_temp_creation', './test_output_creation', './test_logs_creation']
         
         for dir_path in test_dirs:
             os.makedirs(dir_path, exist_ok=True)
