@@ -33,7 +33,7 @@ This plan outlines the steps to implement the full functionality of the `subtitl
 *   **Sub-task 1.4: Audio Extraction (`src/core/audio_processor.py`)**
     *   Implement high-quality audio extraction from video using `moviepy` and `ffmpeg-python`.
     *   Include noise reduction using `noisereduce`.
-    *   *Status: Pending*
+    *   *Status: Completed*
 
 *   **Sub-task 1.5: Basic Transcription (`src/core/transcription.py`)**
     *   Integrate `whisper` for speech-to-text transcription.
