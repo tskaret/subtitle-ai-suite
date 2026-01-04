@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
-import argparse # Added import
+import argparse
 
 # TEMPORARY: Adjusting sys.path for direct execution during development
 # This will be removed once the project is installable as a package
@@ -22,8 +22,7 @@ from src.core.synchronizer import Synchronizer
 from src.formats.srt_handler import SrtHandler
 from src.formats.ass_handler import AssHandler
 from src.subtitle_suite.utils.logger import setup_logging
-# Assuming error_handler also needs to be imported, but for now, using basic logging
-# from src.subtitle_suite.utils.error_handler import ErrorHandler
+from src.ai.emotion_detector import EmotionDetector # Added EmotionDetector import
 
 class SubtitlePipelineManager:
     """
@@ -47,7 +46,7 @@ class SubtitlePipelineManager:
         Initializes the pipeline manager with command-line arguments.
         """
         self.args = args
-        self.logger = setup_logging() # Logger already setup in CLI, but ensure here too
+        self.logger = setup_logging()
         
         self.input_handler = InputHandler(output_dir=Path(self.args.temp_dir) / "downloads")
         self.audio_processor = AudioProcessor()
@@ -59,6 +58,7 @@ class SubtitlePipelineManager:
         self.synchronizer = Synchronizer()
         self.srt_handler = SrtHandler()
         self.ass_handler = AssHandler()
+        self.emotion_detector = EmotionDetector() # Initialize EmotionDetector
 
         self.input_path_processed: Optional[Path] = None
         self.processed_audio_path: Optional[Path] = None
@@ -153,7 +153,7 @@ class SubtitlePipelineManager:
             
             # 2. Process Audio
             self.logger.info(f"Extracting and processing audio from: {self.input_path_processed}")
-            processed_audio_path = self.audio_processor.process(
+            self.processed_audio_path = self.audio_processor.process(
                 str(self.input_path_processed), 
                 output_path=str(temp_audio_dir / f"{self.input_path_processed.stem}_processed.wav")
             )
@@ -182,7 +182,17 @@ class SubtitlePipelineManager:
                 self.logger.info("Synchronizing transcription segments with speaker diarization.")
                 synchronized_segments = self.synchronizer.synchronize(raw_transcription_segments, speaker_profiles)
             
-            # 6. Generate Subtitles
+            # 6. Emotion Detection (Optional)
+            if hasattr(self.args, 'enable_emotion_detection') and self.args.enable_emotion_detection:
+                self.logger.info("Performing emotion detection.")
+                # This would typically be done segment by segment, or on the whole audio.
+                # For now, a simplified call on the full audio.
+                overall_emotion = self.emotion_detector.detect_emotion(str(self.processed_audio_path))
+                self.logger.info(f"Overall emotion detected: {overall_emotion}")
+                # You might want to store this in the final_segments or a separate report.
+
+
+            # 7. Generate Subtitles
             base_output_name = self.input_path_processed.stem
             if self.args.prefix:
                 base_output_name = f"{self.args.prefix}_{base_output_name}"

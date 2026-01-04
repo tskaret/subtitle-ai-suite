@@ -141,6 +141,14 @@ Examples:
             default=10,
             help='Maximum number of speakers (default: 10)'
         )
+
+        # AI Options (New group for advanced AI features)
+        ai_group = parser.add_argument_group('AI Options')
+        ai_group.add_argument(
+            '--enable-emotion-detection',
+            action='store_true',
+            help='Enable emotion detection in audio'
+        )
         
         # Quality options
         quality_group = parser.add_argument_group('Quality Options')
