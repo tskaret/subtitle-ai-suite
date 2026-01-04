@@ -76,7 +76,7 @@ This plan outlines the steps to implement the full functionality of the `subtitl
 *   **Sub-task 3.1: Batch Processing (`src/processing/batch_processor.py`)**
     *   Implement directory and playlist processing.
     *   Add resume functionality.
-    *   *Status: Pending*
+    *   *Status: Completed*
 
 *   **Sub-task 3.2: Content Enhancement (emotion detection, chapter generation, etc.)**
     *   Integrate `src/ai/emotion_detector.py` and other AI features as described in `gameplan.md`.
