@@ -11,6 +11,7 @@ from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, asdict
 
 from .modern_speaker_diarization import ModernSpeakerDiarization, SpeakerProfile
+from .audio_processor import AudioProcessor
 
 @dataclass
 class SubtitleSegment:
@@ -55,6 +56,7 @@ class EnhancedSubtitleProcessor:
         # Initialize key components
         self.whisper_model = self._load_whisper_model()
         self.speaker_diarization = ModernSpeakerDiarization(config)
+        self.audio_processor = AudioProcessor(config)
         
         # Color palette for speakers
         self.speaker_colors = {
@@ -106,6 +108,19 @@ class EnhancedSubtitleProcessor:
                 download_time = time.time() - download_start
                 print(f"⬇️  Download completed in {download_time:.1f}s")
             
+            # Enhance Audio (Noise Reduction, Normalization, Resampling)
+            enhance_start = time.time()
+            print(f"🔊 Enhancing audio (Noise Reduction & Normalization)...")
+            # Create a processed filename in temp dir
+            base_name = os.path.basename(audio_path)
+            processed_path = os.path.join(self.temp_dir, f"processed_{base_name}")
+            if not processed_path.endswith('.wav'):
+                 processed_path += '.wav'
+            
+            audio_path = self.audio_processor.process(audio_path, processed_path)
+            enhance_time = time.time() - enhance_start
+            print(f"✨ Audio enhancement completed in {enhance_time:.1f}s")
+
             # Perform speaker diarization
             diarization_start = time.time()
             speaker_profiles = self.speaker_diarization.process_audio(audio_path)
