@@ -18,7 +18,7 @@ This plan outlines the steps to implement the full functionality of the `subtitl
     *   Review `requirements.txt` and `setup.py` from `gameplan.md`.
     *   Ensure all necessary dependencies are listed and installable.
     *   Check for `ffmpeg` installation and provide guidance if missing.
-    *   *Status: Pending*
+    *   *Status: Completed*
 
 *   **Sub-task 1.2: Project Structure Alignment**
     *   Compare the current project structure with the "Recommended Project Structure" in `gameplan.md`.
