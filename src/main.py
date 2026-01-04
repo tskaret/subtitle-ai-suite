@@ -145,6 +145,7 @@ def show_system_info():
         'torch': 'PyTorch',
         'whisper': 'OpenAI Whisper',
         'speechbrain': 'SpeechBrain',
+        'pyannote.audio': 'Pyannote Audio',
         'moviepy': 'MoviePy',
         'pydub': 'PyDub',
         'yt_dlp': 'YT-DLP',

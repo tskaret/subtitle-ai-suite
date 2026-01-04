@@ -91,10 +91,10 @@ python src/main.py --check-deps
 - ✅ **Error Handling**: Working (graceful degradation)
 
 ### **Known Limitations in Current Environment:**
-- SpeechBrain models have permission issues in WSL (Operation not permitted)
+- ✅ **Gender Detection**: Implemented using F0 (pitch) analysis
+- ⚠️ SpeechBrain models have permission issues in WSL (resolved by using pyannote.audio)
 - Some optional models require HuggingFace authentication
 - Torchvision not installed (causes harmless warnings)
-- Gender detection model appears unavailable (optional feature)
 
 ### **Verified Working Features:**
 - ✅ Whisper large-v2 model loads and transcribes successfully

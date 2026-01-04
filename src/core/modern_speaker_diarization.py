@@ -6,6 +6,8 @@ import os
 import torch
 import torchaudio
 import tempfile
+import numpy as np
+import librosa
 from typing import Dict, List, Any, Tuple
 from dataclasses import dataclass, asdict
 from pyannote.audio import Pipeline
@@ -27,6 +29,7 @@ class SpeakerProfile:
     start_time: float = 0.0
     end_time: float = 0.0
     segment_times: list = None  # List of (start, end) tuples for all segments
+    gender: str = 'unknown'
     
     def __post_init__(self):
         if self.segment_times is None:
@@ -139,9 +142,13 @@ class ModernSpeakerDiarization:
             # Convert pyannote results to our speaker profiles
             speaker_profiles = self._convert_diarization_results(diarization)
             
+            # Perform gender detection
+            print("⚧️  Detecting speaker genders...")
+            self._detect_genders(audio_path, speaker_profiles)
+            
             print(f"✅ Found {len(speaker_profiles)} speakers with pyannote diarization")
             for speaker in speaker_profiles:
-                print(f"   Speaker {speaker.id}: {speaker.total_speech_time:.1f}s total speech time")
+                print(f"   Speaker {speaker.id}: {speaker.total_speech_time:.1f}s total speech time ({speaker.gender})")
             
             return speaker_profiles
             
@@ -206,6 +213,71 @@ class ModernSpeakerDiarization:
         speaker_profiles.sort(key=lambda x: x.total_speech_time, reverse=True)
         
         return speaker_profiles
+    
+    def _detect_genders(self, audio_path: str, speaker_profiles: List[SpeakerProfile]):
+        """
+        Detect gender for each speaker using F0 (pitch) analysis
+        
+        Args:
+            audio_path (str): Path to audio file
+            speaker_profiles (List[SpeakerProfile]): List of speaker profiles to update
+        """
+        try:
+            # Load audio using librosa for pitch analysis
+            # Load only once, resample to 16kHz
+            y, sr = librosa.load(audio_path, sr=16000, mono=True)
+            
+            for speaker in speaker_profiles:
+                # Collect audio segments for this speaker (up to 30 seconds to save time)
+                speaker_audio = []
+                total_duration = 0
+                
+                for start, end in speaker.segment_times:
+                    start_sample = int(start * sr)
+                    end_sample = int(end * sr)
+                    
+                    if start_sample < len(y) and end_sample <= len(y):
+                        segment = y[start_sample:end_sample]
+                        speaker_audio.append(segment)
+                        total_duration += (end - start)
+                    
+                    if total_duration > 30:  # Limit to 30 seconds per speaker
+                        break
+                
+                if speaker_audio:
+                    # Concatenate segments
+                    combined_audio = np.concatenate(speaker_audio)
+                    
+                    # Estimate F0 (Fundamental Frequency)
+                    f0, voiced_flag, voiced_probs = librosa.pyin(
+                        combined_audio, 
+                        fmin=librosa.note_to_hz('C2'), 
+                        fmax=librosa.note_to_hz('C7'),
+                        sr=sr
+                    )
+                    
+                    # Filter for voiced segments
+                    voiced_f0 = f0[voiced_flag]
+                    
+                    if len(voiced_f0) > 0:
+                        mean_f0 = np.nanmean(voiced_f0)
+                        
+                        # Simple threshold-based classification
+                        # Male: typically 85-180 Hz
+                        # Female: typically 165-255 Hz
+                        if mean_f0 < 165:
+                            speaker.gender = 'male'
+                        else:
+                            speaker.gender = 'female'
+                            
+                        # Confidence based on how far from threshold (simple heuristic)
+                        distance = abs(mean_f0 - 165)
+                        confidence_boost = min(0.2, distance / 100.0)
+                        speaker.confidence = min(1.0, speaker.confidence + confidence_boost)
+        
+        except Exception as e:
+            print(f"⚠️  Gender detection failed: {e}")
+            # Continue without gender detection
     
     def _fallback_speaker_detection(self, audio_path: str) -> List[SpeakerProfile]:
         """
