@@ -108,4 +108,4 @@ This plan outlines the steps to implement the full functionality of the `subtitl
 
 *   **Sub-task 4.4: Update Documentation**
     *   Update `README.md` and create/update relevant documentation files to reflect implemented features, usage, and installation instructions.
-    *   *Status: Pending*
+    *   *Status: Completed*
