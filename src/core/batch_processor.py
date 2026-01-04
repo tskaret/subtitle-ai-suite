@@ -12,8 +12,8 @@ from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass, asdict
 from tqdm import tqdm
 
-from ..utils.error_handler import ErrorHandler, SubtitleProcessingError
-from ..utils.logger import setup_logging
+from utils.error_handler import ErrorHandler, SubtitleProcessingError
+from utils.logger import setup_logging
 from .subtitle_processor import EnhancedSubtitleProcessor
 
 @dataclass

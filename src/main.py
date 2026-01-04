@@ -8,14 +8,52 @@ import sys
 import argparse
 import logging
 from pathlib import Path
+from typing import Dict, Any, Optional
 
 # Add src directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
+from core.subtitle_processor import EnhancedSubtitleProcessor
 from utils.device_manager import DeviceManager
 from utils.config_manager import ConfigManager
 from utils.logger import setup_logging
 from utils.error_handler import ErrorHandler, GracefulShutdown
+
+class SubtitleAISuite:
+    """
+    High-level API for Subtitle AI Suite
+    Allows direct Python usage of the suite's functionality
+    """
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        Initialize the suite with configuration
+        
+        Args:
+            config (Dict, optional): Configuration dictionary
+        """
+        self.config = config or {}
+        # Set defaults if not present
+        self.config.setdefault('output_dir', './output')
+        self.config.setdefault('temp_dir', './temp')
+        self.config.setdefault('whisper_model', 'large-v2')
+        self.config.setdefault('device', 'auto')
+
+    def process(self, input_path: str, **kwargs) -> Dict[str, Any]:
+        """
+        Process an input file or URL
+        
+        Args:
+            input_path (str): Path to file or YouTube URL
+            **kwargs: Override configuration options
+            
+        Returns:
+            Dict: Processing results
+        """
+        run_config = self.config.copy()
+        run_config.update(kwargs)
+        
+        processor = EnhancedSubtitleProcessor(run_config)
+        return processor.process_audio(input_path)
 
 def create_parser():
     """Create main argument parser"""
@@ -72,6 +110,19 @@ def create_parser():
     )
     
     return parser
+
+def parse_arguments(args=None):
+    """
+    Parse arguments helper for testing and direct usage
+    
+    Args:
+        args (list): List of arguments (default: sys.argv[1:])
+        
+    Returns:
+        argparse.Namespace: Parsed arguments
+    """
+    parser = create_parser()
+    return parser.parse_known_args(args)[0]
 
 def show_system_info():
     """Show comprehensive system information"""
