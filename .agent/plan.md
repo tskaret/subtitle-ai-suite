@@ -84,7 +84,7 @@ This plan outlines the steps to implement the full functionality of the `subtitl
 
 *   **Sub-task 3.3: Multilingual Support & Translation (`src/core/translator.py`)**
     *   Implement translation capabilities using local (Ollama) and online (OpenAI GPT, Hugging Face) options.
-    *   *Status: Pending*
+    *   *Status: Completed*
 
 *   **Sub-task 3.4: GUI Implementation (`src/interfaces/gui/main_window.py`)**
     *   Develop the basic GUI using `tkinter` or `customtkinter`.
