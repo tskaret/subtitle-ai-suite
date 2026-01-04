@@ -38,7 +38,7 @@ This plan outlines the steps to implement the full functionality of the `subtitl
 *   **Sub-task 1.5: Basic Transcription (`src/core/transcription.py`)**
     *   Integrate `whisper` for speech-to-text transcription.
     *   Implement word-level timestamp extraction.
-    *   *Status: Pending*
+    *   *Status: Completed*
 
 *   **Sub-task 1.6: Basic Subtitle Output (`src/formats/srt_handler.py`, `src/formats/ass_handler.py`)**
     *   Generate basic SRT and ASS files from transcription data.
