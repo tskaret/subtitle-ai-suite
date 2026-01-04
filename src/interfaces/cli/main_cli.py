@@ -23,8 +23,9 @@ current_file_path = Path(__file__).resolve()
 project_root = current_file_path.parents[3]
 sys.path.insert(0, str(project_root))
 
-# Import the SubtitlePipelineManager
+# Import the SubtitlePipelineManager and BatchProcessor
 from src.processing.pipeline_manager import SubtitlePipelineManager
+from src.processing.batch_processor import BatchProcessor # New Import
 
 # Assuming setup_logging is now in src/subtitle_suite/utils/logger.py
 from src.subtitle_suite.utils.logger import setup_logging
@@ -299,9 +300,41 @@ Examples:
             return False
     
     def process_batch(self, args) -> bool:
-        """Process batch directory (placeholder for now)"""
-        print("❌ Batch processing not yet fully implemented with new pipeline.")
-        return False
+        """Process batch directory or playlist using BatchProcessor"""
+        try:
+            # Create a dictionary from args for BatchProcessor config
+            batch_config = vars(args) 
+            batch_processor = BatchProcessor(batch_config, max_workers=args.parallel)
+
+            jobs_added = 0
+            if args.batch:
+                self.logger.info(f"Adding directory {args.batch} to batch processing.")
+                jobs_added = batch_processor.add_directory(args.batch, args.output_dir)
+            elif args.playlist:
+                self.logger.info(f"Adding playlist {args.playlist} to batch processing.")
+                jobs_added = batch_processor.add_playlist(args.playlist, args.output_dir)
+
+            if jobs_added == 0:
+                print("❌ No jobs were added for batch processing.")
+                return False
+
+            self.logger.info(f"Starting batch processing for {jobs_added} jobs.")
+            report = batch_processor.process_all()
+
+            if report['failed'] == 0:
+                print(f"✅ Batch processing completed successfully for all {report['completed']} jobs.")
+                return True
+            elif report['completed'] > 0:
+                print(f"⚠️ Batch processing completed with {report['completed']} successes and {report['failed']} failures.")
+                return False
+            else:
+                print(f"❌ Batch processing failed for all {report['failed']} jobs.")
+                return False
+
+        except Exception as e:
+            print(f"❌ Unexpected error during batch processing: {e}")
+            self.logger.error(f"Unexpected error in process_batch: {e}", exc_info=True)
+            return False
     
     def build_config(self, args) -> Dict[str, Any]:
         """Build configuration from arguments (simplified for now)"""
@@ -339,11 +372,8 @@ Examples:
 
         # Process based on input type
         try:
-            if args.batch:
+            if args.batch or args.playlist: # Handle both batch and playlist with process_batch
                 success = self.process_batch(args)
-            elif args.playlist:
-                print("❌ Playlist processing not yet fully implemented.")
-                return 1
             else:
                 success = self.process_single(args)
             
@@ -358,7 +388,9 @@ Examples:
             self.logger.error(f"Unexpected error in CLI run: {e}", exc_info=True)
             return 1
         finally:
-            # Cleanup is now handled by SubtitlePipelineManager's _cleanup method
+            # Cleanup is now handled by SubtitlePipelineManager's _cleanup method for single process
+            # For batch, individual pipelines handle their own cleanup.
+            # A central batch cleanup might be added later if needed.
             pass
 
 
