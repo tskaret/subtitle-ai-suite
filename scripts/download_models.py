@@ -62,6 +62,21 @@ def download_speechbrain_models():
         print(f"  ❌ Error setting up SpeechBrain: {e}")
         return False
 
+def check_pyannote_setup():
+    """Check Pyannote setup"""
+    print("📥 Checking Pyannote setup...")
+    
+    hf_token = os.getenv('HF_TOKEN')
+    if not hf_token:
+        print("  ⚠️  HF_TOKEN environment variable not found.")
+        print("     Pyannote models require a Hugging Face token.")
+        print("     Please set HF_TOKEN in your .env file.")
+        print("     Models: pyannote/speaker-diarization-3.1")
+        return True # Don't fail, just warn
+        
+    print("  ✓ HF_TOKEN found")
+    return True
+
 def verify_system_dependencies():
     """Verify system dependencies are installed"""
     print("🔍 Verifying system dependencies...")
@@ -152,6 +167,9 @@ def main():
         success = False
     
     if not download_speechbrain_models():
+        success = False
+
+    if not check_pyannote_setup():
         success = False
     
     if success:
