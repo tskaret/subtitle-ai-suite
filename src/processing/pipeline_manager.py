@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
+import argparse # Added import
 
 # TEMPORARY: Adjusting sys.path for direct execution during development
 # This will be removed once the project is installable as a package
@@ -152,7 +153,7 @@ class SubtitlePipelineManager:
             
             # 2. Process Audio
             self.logger.info(f"Extracting and processing audio from: {self.input_path_processed}")
-            self.processed_audio_path = self.audio_processor.process(
+            processed_audio_path = self.audio_processor.process(
                 str(self.input_path_processed), 
                 output_path=str(temp_audio_dir / f"{self.input_path_processed.stem}_processed.wav")
             )
@@ -251,4 +252,3 @@ class SubtitlePipelineManager:
             # Additional cleanup for downloaded videos if they are temporary and not original input
             # This needs a more sophisticated way to track downloaded files vs. user-provided ones
             self.logger.debug(f"Basic cleanup done. Consider --keep-temp or more advanced cleanup.")
-
