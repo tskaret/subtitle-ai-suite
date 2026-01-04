@@ -42,7 +42,7 @@ This plan outlines the steps to implement the full functionality of the `subtitl
 
 *   **Sub-task 1.6: Basic Subtitle Output (`src/formats/srt_handler.py`, `src/formats/ass_handler.py`)**
     *   Generate basic SRT and ASS files from transcription data.
-    *   *Status: Pending*
+    *   *Status: Completed*
 
 *   **Sub-task 1.7: Core CLI Integration (`src/interfaces/cli/main_cli.py`)**
     *   Expose basic functionality through a command-line interface.
