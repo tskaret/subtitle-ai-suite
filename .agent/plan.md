@@ -96,7 +96,7 @@ This plan outlines the steps to implement the full functionality of the `subtitl
 
 *   **Sub-task 4.1: Unit Tests**
     *   Write unit tests for core modules (e.g., `audio_processor`, `transcription`, `speaker_analyzer`).
-    *   *Status: Pending*
+    *   *Status: Completed*
 
 *   **Sub-task 4.2: Integration Tests**
     *   Write integration tests for the full pipeline, batch processing, and CLI.
