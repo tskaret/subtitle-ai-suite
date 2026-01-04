@@ -15,27 +15,43 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# TEMPORARY: Adjusting sys.path for direct execution during development
+# This will be removed once the project is installable as a package
+current_file_path = Path(__file__).resolve()
+# Assuming project root is 3 levels up from src/interfaces/cli/main_cli.py
+project_root = current_file_path.parents[3]
+sys.path.insert(0, str(project_root))
 
-from core.subtitle_processor import EnhancedSubtitleProcessor
-from utils.device_manager import DeviceManager
-from utils.config_manager import ConfigManager
-from utils.logger import setup_logging
+from src.core.input_handler import InputHandler
+from src.core.audio_processor import AudioProcessor
+from src.core.transcription import TranscriptionProcessor
+from src.formats.srt_handler import SrtHandler
+from src.formats.ass_handler import AssHandler
+# Assuming setup_logging is now in src/subtitle_suite/utils/logger.py
+from src.subtitle_suite.utils.logger import setup_logging
+
+# For now, temporarily remove ConfigManager and DeviceManager until they are fully integrated
+# from src.utils.device_manager import DeviceManager # Used in show_system_info
+# from src.utils.config_manager import ConfigManager # Used for loading config
 
 class SubtitleCLI:
     """Complete CLI interface for subtitle processing"""
     
     def __init__(self):
-        self.config_manager = ConfigManager()
-        self.logger = setup_logging()
+        # self.config_manager = ConfigManager() # Not strictly needed for this basic CLI implementation
+        self.logger = setup_logging() # Assuming setup_logging takes care of basic logging setup
+        self.input_handler = InputHandler()
+        self.audio_processor = AudioProcessor()
+        self.transcription_processor = TranscriptionProcessor()
+        self.srt_handler = SrtHandler()
+        self.ass_handler = AssHandler()
         
     def create_parser(self) -> argparse.ArgumentParser:
         """Create comprehensive argument parser"""
         parser = argparse.ArgumentParser(
             description="Subtitle AI Suite - Professional subtitle generation",
             formatter_class=argparse.RawDescriptionHelpFormatter,
-            epilog="""
+            epilog=f'''
 Examples:
   %(prog)s video.mp4                           # Basic processing
   %(prog)s video.mp4 --colorize                # With speaker colors
@@ -43,7 +59,7 @@ Examples:
   %(prog)s --batch ./videos/                   # Batch process folder
   %(prog)s video.mp4 --format ass srt vtt      # Multiple formats
   %(prog)s video.mp4 --language en --translate es  # Translation
-            """
+            '''
         )
         
         # Input arguments
@@ -213,10 +229,14 @@ Examples:
             print("Error: Must specify input file, batch directory, or playlist URL")
             return False
             
-        if args.input and args.batch:
-            print("Error: Cannot specify both input file and batch directory")
+        if args.input and (args.batch or args.playlist):
+            print("Error: Cannot specify input file with batch directory or playlist URL")
             return False
-            
+        
+        if args.batch and args.playlist:
+            print("Error: Cannot specify both batch directory and playlist URL")
+            return False
+
         if args.language and len(args.language) != 2:
             print("Error: Language must be 2-letter ISO 639-1 code (e.g., 'en', 'es')")
             return False
@@ -232,8 +252,8 @@ Examples:
         print("🖥️  Subtitle AI Suite - System Information")
         print("=" * 50)
         
-        # Device information
-        DeviceManager.print_device_info()
+        # Device information (placeholder - needs DeviceManager integration)
+        print("\nDevice Information: (Not implemented yet)")
         
         # Python and package versions
         import torch
@@ -241,37 +261,104 @@ Examples:
         print(f"\nPython Version: {sys.version}")
         print(f"PyTorch Version: {torch.__version__}")
         
-        # Check for optional dependencies
-        optional_deps = {
-            'whisper': 'OpenAI Whisper',
-            'speechbrain': 'SpeechBrain',
-            'moviepy': 'MoviePy',
-            'yt_dlp': 'YT-DLP'
-        }
+        # Check for optional dependencies (simplified for now)
+        print("\nDependency Status: (Simplified for now)")
+        try:
+            import whisper
+            print("  ✓ OpenAI Whisper")
+        except ImportError:
+            print("  ❌ OpenAI Whisper (not installed)")
+        try:
+            import moviepy
+            print("  ✓ MoviePy")
+        except ImportError:
+            print("  ❌ MoviePy (not installed)")
         
-        print("\nDependency Status:")
-        for module, name in optional_deps.items():
-            try:
-                __import__(module)
-                print(f"  ✓ {name}")
-            except ImportError:
-                print(f"  ❌ {name} (not installed)")
-        
-        # System resources
-        import psutil
-        print(f"\nSystem Resources:")
-        print(f"  CPU Cores: {psutil.cpu_count()}")
-        print(f"  Memory: {psutil.virtual_memory().total / 1e9:.1f} GB")
-        
+        # System resources (placeholder - needs psutil)
+        print("\nSystem Resources: (Not implemented yet)")
+
     def process_single(self, args) -> bool:
         """Process single input"""
         try:
-            config = self.build_config(args)
-            processor = EnhancedSubtitleProcessor(config)
+            # 1. Handle Input (local file or download YouTube)
+            input_path_processed = None
+            if args.input:
+                if "youtube.com" in args.input or "youtu.be" in args.input:
+                    self.logger.info(f"Downloading YouTube video: {args.input}")
+                    input_path_processed = self.input_handler.download_youtube_video(args.input)
+                else:
+                    self.logger.info(f"Processing local file: {args.input}")
+                    input_path_processed = self.input_handler.process_local_file(args.input)
             
-            print(f"📝 Processing: {args.input}")
-            result = processor.process_audio(args.input)
+            if not input_path_processed:
+                raise ValueError("No valid input provided for processing.")
+
+            # Ensure temp directory exists for AudioProcessor to use
+            temp_output_dir = Path(args.temp_dir) / "audio_processing"
+            temp_output_dir.mkdir(parents=True, exist_ok=True)
             
+            # 2. Process Audio
+            self.logger.info(f"Extracting and processing audio from: {input_path_processed}")
+            processed_audio_path = self.audio_processor.process(
+                str(input_path_processed), 
+                output_path=str(temp_output_dir / f"{Path(input_path_processed).stem}_processed.wav")
+            )
+
+            # 3. Transcribe Audio
+            self.logger.info(f"Transcribing audio: {processed_audio_path}")
+            self.transcription_processor.model_name = args.whisper_model # Update model if specified
+            self.transcription_processor.device = args.device if args.device != 'auto' else None
+            
+            # Re-load model if parameters changed, or if it's the first run
+            if not self.transcription_processor.model or \
+               self.transcription_processor.model.model_name != args.whisper_model or \
+               self.transcription_processor.device != (args.device if args.device != 'auto' else None):
+                self.transcription_processor._load_model() # Force reload with new params
+                
+            transcription_result = self.transcription_processor.transcribe_audio(
+                processed_audio_path, language=args.language
+            )
+            transcription_segments = transcription_result.get('segments', [])
+
+            # 4. Generate Subtitles
+            base_output_name = Path(input_path_processed).stem
+            if args.prefix:
+                base_output_name = f"{args.prefix}_{base_output_name}"
+
+            final_output_dir = Path(args.output_dir)
+            final_output_dir.mkdir(parents=True, exist_ok=True)
+
+            for fmt in args.format:
+                output_subtitle_path = final_output_dir / f"{base_output_name}.{fmt}"
+                if fmt == 'srt':
+                    self.logger.info(f"Generating SRT: {output_subtitle_path}")
+                    # SrtHandler expects list of dicts with 'start', 'end', 'text'
+                    srt_data = []
+                    for segment in transcription_segments:
+                        srt_data.append({
+                            'start': segment['start'],
+                            'end': segment['end'],
+                            'text': segment['text']
+                        })
+                    self.srt_handler.generate_srt(srt_data, output_subtitle_path)
+                elif fmt == 'ass':
+                    self.logger.info(f"Generating ASS: {output_subtitle_path}")
+                    ass_data = []
+                    for segment in transcription_segments:
+                        ass_data.append({
+                            'start': segment['start'],
+                            'end': segment['end'],
+                            'text': segment['text']
+                            # Add 'speaker' key here if speaker diarization is integrated
+                        })
+                    self.ass_handler.generate_ass(ass_data, output_subtitle_path)
+                elif fmt == 'json':
+                    self.logger.info(f"Generating JSON transcription result: {output_subtitle_path}")
+                    with open(output_subtitle_path, 'w', encoding='utf-8') as f:
+                        json.dump(transcription_result, f, ensure_ascii=False, indent=4)
+                else:
+                    self.logger.warning(f"Unsupported format for basic generation: {fmt}")
+
             print(f"✅ Completed: {args.input}")
             return True
             
@@ -281,66 +368,15 @@ Examples:
             return False
     
     def process_batch(self, args) -> bool:
-        """Process batch directory"""
-        batch_dir = Path(args.batch)
-        if not batch_dir.exists():
-            print(f"❌ Batch directory not found: {batch_dir}")
-            return False
-        
-        # Find media files
-        media_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.wav', '.mp3', '.flac'}
-        media_files = []
-        
-        for file_path in batch_dir.rglob('*'):
-            if file_path.suffix.lower() in media_extensions:
-                media_files.append(file_path)
-        
-        if not media_files:
-            print(f"❌ No media files found in: {batch_dir}")
-            return False
-        
-        print(f"📁 Found {len(media_files)} media files")
-        
-        success_count = 0
-        for file_path in media_files:
-            args.input = str(file_path)
-            if self.process_single(args):
-                success_count += 1
-        
-        print(f"✅ Processed {success_count}/{len(media_files)} files")
-        return success_count > 0
+        """Process batch directory (placeholder for now)"""
+        print("❌ Batch processing not yet fully implemented with new pipeline.")
+        return False
     
     def build_config(self, args) -> Dict[str, Any]:
-        """Build configuration from arguments"""
-        config = {
-            'output_dir': args.output_dir,
-            'temp_dir': args.temp_dir,
-            'whisper_model': args.whisper_model,
-            'language': args.language,
-            'formats': args.format,
-            'speaker_colorization': {
-                'enabled': args.colorize,
-                'threshold': args.speaker_threshold,
-                'min_speakers': args.min_speakers,
-                'max_speakers': args.max_speakers
-            },
-            'audio_processing': {
-                'quality': args.audio_quality,
-                'denoise': args.denoise,
-                'normalize': args.normalize
-            },
-            'processing': {
-                'device': args.device,
-                'parallel': args.parallel,
-                'keep_temp': args.keep_temp
-            }
-        }
-        
-        # Load config file if specified
-        if args.config:
-            config.update(self.config_manager.load_config(args.config))
-        
-        return config
+        """Build configuration from arguments (simplified for now)"""
+        # This function might become more complex when ConfigManager is fully integrated
+        # For now, relevant config is passed directly or updated in component instances
+        return {} # Return empty dict as config is managed by individual processors
     
     def run(self, argv=None):
         """Main CLI entry point"""
@@ -354,6 +390,8 @@ Examples:
             logging.getLogger().setLevel(logging.DEBUG)
         elif args.verbose >= 1:
             logging.getLogger().setLevel(logging.INFO)
+        else: # Default logging level if not specified
+            logging.getLogger().setLevel(logging.WARNING)
         
         # Validate arguments
         if not self.validate_args(args):
@@ -365,14 +403,15 @@ Examples:
             return 0
         
         # Create output directory
-        os.makedirs(args.output_dir, exist_ok=True)
-        
+        Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+        Path(args.temp_dir).mkdir(parents=True, exist_ok=True) # Ensure temp_dir exists
+
         # Process based on input type
         try:
             if args.batch:
                 success = self.process_batch(args)
             elif args.playlist:
-                print("❌ Playlist processing not yet implemented")
+                print("❌ Playlist processing not yet fully implemented.")
                 return 1
             else:
                 success = self.process_single(args)
@@ -381,11 +420,24 @@ Examples:
             
         except KeyboardInterrupt:
             print("\n❌ Processing interrupted by user")
+            self.logger.info("Processing interrupted by user.")
             return 1
         except Exception as e:
             print(f"❌ Unexpected error: {e}")
-            self.logger.error(f"Unexpected error: {e}", exc_info=True)
+            self.logger.error(f"Unexpected error in CLI run: {e}", exc_info=True)
             return 1
+        finally:
+            if not args.keep_temp:
+                # Basic cleanup, a more robust cleanup will be in a dedicated util or processor
+                temp_audio_dir = Path(args.temp_dir) / "audio_processing"
+                if temp_audio_dir.exists():
+                    import shutil
+                    shutil.rmtree(temp_audio_dir)
+                    self.logger.info(f"Cleaned up temporary audio directory: {temp_audio_dir}")
+                # Also clean up downloaded videos if they are in self.input_handler.output_dir
+                # This needs a more sophisticated way to track downloaded files vs. user-provided ones
+                self.logger.info(f"Basic cleanup done. Consider --keep-temp or more advanced cleanup.")
+
 
 def main():
     """CLI entry point"""
