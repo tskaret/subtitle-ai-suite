@@ -63,7 +63,7 @@ This plan outlines the steps to implement the full functionality of the `subtitl
 *   **Sub-task 2.3: Speaker Colorization Logic**
     *   Implement logic to analyze speaker distribution and assign colors based on the 95% threshold.
     *   Update `src/formats/ass_handler.py` to apply speaker colorization.
-    *   *Status: Pending*
+    *   *Status: Completed*
 
 *   **Sub-task 2.4: CLI Enhancements**
     *   Add CLI arguments for enabling colorization and setting thresholds.
