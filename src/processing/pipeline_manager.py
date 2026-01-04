@@ -19,10 +19,11 @@ from src.core.audio_processor import AudioProcessor
 from src.core.transcription import TranscriptionProcessor
 from src.core.speaker_analyzer import ModernSpeakerDiarization, SpeakerProfile
 from src.core.synchronizer import Synchronizer
+from src.core.translator import Translator # Added Translator import
 from src.formats.srt_handler import SrtHandler
 from src.formats.ass_handler import AssHandler
 from src.subtitle_suite.utils.logger import setup_logging
-from src.ai.emotion_detector import EmotionDetector # Added EmotionDetector import
+from src.ai.emotion_detector import EmotionDetector
 
 class SubtitlePipelineManager:
     """
@@ -56,9 +57,10 @@ class SubtitlePipelineManager:
         )
         self.speaker_diarization = ModernSpeakerDiarization()
         self.synchronizer = Synchronizer()
+        self.translator = Translator(device=self.args.device) # Initialize Translator
         self.srt_handler = SrtHandler()
         self.ass_handler = AssHandler()
-        self.emotion_detector = EmotionDetector() # Initialize EmotionDetector
+        self.emotion_detector = EmotionDetector()
 
         self.input_path_processed: Optional[Path] = None
         self.processed_audio_path: Optional[Path] = None
@@ -160,7 +162,7 @@ class SubtitlePipelineManager:
 
             # 3. Speaker Diarization
             speaker_profiles: List[SpeakerProfile] = []
-            if self.args.colorize: # Only run diarization if colorization is requested
+            if self.args.colorize or (hasattr(self.args, 'translate') and self.args.translate): # Run diarization if colorization or translation is requested
                 self.logger.info(f"Performing speaker diarization on: {self.processed_audio_path}")
                 speaker_profiles = self.speaker_diarization.process_audio(str(self.processed_audio_path))
                 self.logger.info(f"Diarization found {len(speaker_profiles)} speakers.")
@@ -185,14 +187,26 @@ class SubtitlePipelineManager:
             # 6. Emotion Detection (Optional)
             if hasattr(self.args, 'enable_emotion_detection') and self.args.enable_emotion_detection:
                 self.logger.info("Performing emotion detection.")
-                # This would typically be done segment by segment, or on the whole audio.
-                # For now, a simplified call on the full audio.
                 overall_emotion = self.emotion_detector.detect_emotion(str(self.processed_audio_path))
                 self.logger.info(f"Overall emotion detected: {overall_emotion}")
-                # You might want to store this in the final_segments or a separate report.
+            
+            # 7. Translation (Optional)
+            final_segments = synchronized_segments
+            if hasattr(self.args, 'translate') and self.args.translate:
+                if not self.args.language:
+                    self.logger.warning("Translation requested but no source language specified. Using detected language from Whisper.")
+                    source_language = transcription_result.get('language', 'en') # Fallback to English
+                else:
+                    source_language = self.args.language
 
+                self.logger.info(f"Translating segments from {source_language} to {self.args.translate}.")
+                final_segments = self.translator.translate_segments(
+                    synchronized_segments, 
+                    src_lang=source_language, 
+                    tgt_lang=self.args.translate
+                )
 
-            # 7. Generate Subtitles
+            # 8. Generate Subtitles
             base_output_name = self.input_path_processed.stem
             if self.args.prefix:
                 base_output_name = f"{self.args.prefix}_{base_output_name}"
@@ -203,7 +217,7 @@ class SubtitlePipelineManager:
             speaker_colors_map = {}
             if self.args.colorize and speaker_profiles:
                 self.logger.info("Analyzing speaker distribution for colorization.")
-                speaker_colors_map = self._analyze_speaker_distribution(synchronized_segments, speaker_profiles, self.args.speaker_threshold)
+                speaker_colors_map = self._analyze_speaker_distribution(final_segments, speaker_profiles, self.args.speaker_threshold)
             elif self.args.colorize and not speaker_profiles:
                 self.logger.warning("Colorization requested but no speaker profiles available.")
 
@@ -213,7 +227,7 @@ class SubtitlePipelineManager:
                 if fmt == 'srt':
                     self.logger.info(f"Generating SRT: {output_subtitle_path}")
                     srt_data = []
-                    for segment in synchronized_segments:
+                    for segment in final_segments:
                         srt_data.append({
                             'start': segment['start'],
                             'end': segment['end'],
@@ -223,12 +237,12 @@ class SubtitlePipelineManager:
                     generated_files.append(str(output_subtitle_path))
                 elif fmt == 'ass':
                     self.logger.info(f"Generating ASS: {output_subtitle_path}")
-                    self.ass_handler.generate_ass(synchronized_segments, output_subtitle_path, speaker_colors=speaker_colors_map if self.args.colorize else None)
+                    self.ass_handler.generate_ass(final_segments, output_subtitle_path, speaker_colors=speaker_colors_map if self.args.colorize else None)
                     generated_files.append(str(output_subtitle_path))
                 elif fmt == 'json':
                     self.logger.info(f"Generating JSON transcription result: {output_subtitle_path}")
                     with open(output_subtitle_path, 'w', encoding='utf-8') as f:
-                        json.dump(synchronized_segments, f, ensure_ascii=False, indent=4)
+                        json.dump(final_segments, f, ensure_ascii=False, indent=4)
                     generated_files.append(str(output_subtitle_path))
                 else:
                     self.logger.warning(f"Unsupported format for basic generation: {fmt}")
@@ -238,7 +252,7 @@ class SubtitlePipelineManager:
                 "input_source": input_source,
                 "output_dir": str(final_output_dir),
                 "generated_files": generated_files,
-                "final_segments": synchronized_segments
+                "final_segments": final_segments
             }
             
         except Exception as e:
