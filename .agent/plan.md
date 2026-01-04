@@ -28,7 +28,7 @@ This plan outlines the steps to implement the full functionality of the `subtitl
 *   **Sub-task 1.3: Basic Input Handling (`src/core/input_handler.py`)**
     *   Implement basic functionality for downloading YouTube videos using `pytube` and `yt-dlp`.
     *   Implement functionality for reading local media files.
-    *   *Status: Pending*
+    *   *Status: Completed*
 
 *   **Sub-task 1.4: Audio Extraction (`src/core/audio_processor.py`)**
     *   Implement high-quality audio extraction from video using `moviepy` and `ffmpeg-python`.
