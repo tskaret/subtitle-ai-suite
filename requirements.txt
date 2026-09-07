@@ -46,7 +46,7 @@ bcrypt>=4.0.0
 
 # GUI
 tkinter-tooltip>=2.4.0
-pillow>=10.0.0
+pillow>=12.3.0
 customtkinter>=5.2.0
 
 # Development and testing
